@@ -128,6 +128,24 @@ class ProviderConfig:
                 model_settings=model_settings
             )
         
+        elif provider == "lmstudio":
+            # Use LM Studio OpenAI-compatible endpoint
+            logger.debug(f"Creating LM Studio agent with model: {model}")
+            lmstudio_client = AsyncOpenAI(
+                base_url="http://192.168.50.30:1234/v1",
+                api_key="not-needed"  # LM Studio doesn't require API key
+            )
+            return Agent(
+                name=name,
+                instructions=instructions,
+                tools=tools,
+                model=OpenAIChatCompletionsModel(
+                    model=model,
+                    openai_client=lmstudio_client
+                ),
+                model_settings=model_settings
+            )
+        
         else:
             raise ValueError(f"Unsupported provider: {provider}")
     
@@ -186,5 +204,24 @@ class ProviderConfig:
                 return False, "Ollama service timeout. Check if service is running: ollama serve"
             except Exception as e:
                 return False, f"Error checking Ollama availability: {str(e)}"
+        
+        # Check LM Studio availability
+        if provider == "lmstudio":
+            try:
+                response = requests.get("http://192.168.50.30:1234/v1/models", timeout=2)
+                if response.status_code == 200:
+                    models = response.json().get("data", [])
+                    if not models:
+                        return False, "No models loaded in LM Studio. Load a model first."
+                    # LM Studio typically uses the loaded model regardless of name
+                    logger.debug(f"LM Studio models available: {[m.get('id') for m in models]}")
+                else:
+                    return False, f"LM Studio server error: {response.status_code}"
+            except requests.ConnectionError:
+                return False, "LM Studio not reachable at http://192.168.50.30:1234. Is it running?"
+            except requests.Timeout:
+                return False, "LM Studio timeout. Check if server is responding."
+            except Exception as e:
+                return False, f"Error checking LM Studio: {str(e)}"
         
         return True, None
